@@ -606,7 +606,7 @@ static NSString *wq_ft_new_name(NSString *name, NSString *find, NSString *replac
         [fields addObject:field];
     }
     _fields = fields;
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:WQLocalized(@"Rename") style:UIBarButtonItemStyleDone
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:WQLocalized(@"Rename") style:wq_primary_button_style()
                                                                               target:self action:@selector(confirmRename)];
     self.navigationItem.rightBarButtonItem.enabled = NO;
     NSArray<NSString *> *names = wq_list(_folder, NULL) ?: @[];

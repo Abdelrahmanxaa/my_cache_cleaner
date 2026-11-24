@@ -81,8 +81,20 @@ new files.
 
 - **Apps → Tools (wrench)**: **Version History** (each installed app's version
   and build over time; apps that changed since the last check come first),
-  **IPA Library** (the IPAs in `Documents/IPAs`: share or delete) and
-  **Export All IPAs…**.
+  **IPA Library** (the IPAs in `Documents/IPAs`: share or delete),
+  **Export All IPAs…** and **Backup Cleanup** (keep only the newest N backups
+  of every app; safety backups made before a restore are always kept).
+  **App Info** (tap or long-press an app): version, minimum iOS, URL schemes,
+  permission texts, background modes, signed entitlements and the encryption
+  status; tap a row to copy its value.
+- **Folder Tools** (a folder's "…" menu): **Storage Breakdown** (what takes the
+  space in this folder), **Find Duplicates** (identical files by SHA-256),
+  **Find Old Files…** (not changed for N days), **Compare Folders** (mark one
+  folder, open another, compare: only in one, or different size; works for
+  backups too), **Bulk Rename…** (find/replace, prefix, suffix with a preview)
+  and **Tagged Items**. Results open the containing folder, copy the path or
+  delete (always confirmed, with the extra warning for risky paths).
+- **Tags**: long-press any item → Tag: a colored dot before its name.
 
 - **Files** (tab, New Design only): the folder browser starting at the device
   root `/`, with a shortcut row (Root, App Data, App Groups, App Bundles where

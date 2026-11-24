@@ -10,7 +10,7 @@ and cache cleaner (Objective-C, UIKit). Upstream: github.com/kolbicz/WQFiles.
 - `WQUI.*`: shared UI helpers (`wq_size_text`, alerts).
 - `WQAccess.*`, `WQAccessSafety.h`: filesystem access, `wq_measure_tree` (folder byte size).
 - `WQApps`, `WQCache`, `WQArchive`, `WQTrash`, `WQSharing`, `WQWebServer` (Wi-Fi Sharing pages), etc.
-- `WQTools.*`: Apps-screen tools: version history, IPA library, export all IPAs.
+- `WQTools.*`: Apps-screen tools: version history, IPA library, export all IPAs. `WQFolderTools.m` (declared in WQTools.h): folder tools menu (storage, duplicates, old files, compare, bulk rename), tags, backup cleanup, app info. Both files are listed in build.sh and the tests/*.sh source lists.
 - `*.lproj/Localizable.strings`: 14 languages. `examples/inspectors/`: inspector samples.
 - `tests/`: host regression suites (`run_all_tests.sh`; needs macOS clang). `build.sh` builds the IPA and runs them first.
 
