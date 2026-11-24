@@ -21,5 +21,8 @@ and cache cleaner (Objective-C, UIKit). Upstream: github.com/kolbicz/WQFiles.
 - Export IPA (WQApps.m `exportIPA:`): copies an installed app's .app into Documents/IPAs as a Payload/ ZIP. Reports encryption (cryptid) but never decrypts.
 - Files tab (main.m `WQExplorerViewController`): New Design only; embeds a WQNavigationController at `/` under a shortcuts row and path bar.
 
+## Repository
+Private GitHub repo `Abdelrahmanxaa/my_cache_cleaner` (since 2026-11-25), remote `origin`, branch `main`. Plain `git push` works (Git Credential Manager); never ask for or paste tokens. No `gh` CLI. New repos are created on github.com with Claude in Chrome. No Co-Authored-By trailers.
+
 ## Build / run
 macOS only: `bash build.sh` (or `tests/run_all_tests.sh`). Not buildable on this Windows machine.

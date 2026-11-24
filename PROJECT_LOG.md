@@ -19,6 +19,9 @@ Still to build: storage breakdown, duplicate finder, old-files finder, clean pre
 Already in the app before (not rebuilt): plist/SQLite/hex/text viewers, Largest Files, sharing password + QR + uploads, Recent, Log.
 GitHub push, CI build and Telegram delivery: blocked until the user gives GitHub access (no `gh`, no git identity/credentials on this machine). Telegram chat id is in ~/.claude/channels/telegram/access.json.
 
+## Repository
+- GitHub (private): https://github.com/Abdelrahmanxaa/my_cache_cleaner (created and first pushed 2026-11-25, branch `main`). Push with plain `git push` (Git Credential Manager holds the login; no `gh`). Commits carry no Co-Authored-By trailer (user's rule).
+
 ## Changelog
 - 2026-11-25 (0.9.20+local5): new `WQTools.m/.h`. Apps screen gets a Tools menu (wrench): Version History (reads each installed app's Info.plist, stores history in Application Support/VersionHistory.plist, changed apps listed first with "old → new"), IPA Library (Documents/IPAs: share, swipe delete with confirm), Export All IPAs (sequential, progress, cancel). About (both designs and the classic alert) shows "Modified by abdelrahmanxaa". App Group failure text now explains ESign/Feather/Sideloadly (the app can't grant itself a group; the signer's profile must contain one). WQTools.m added to build.sh and the test scripts. Not compiled.
 - 2026-11-24 (0.9.20+local4): new Files tab (New Design only). `WQExplorerViewController` in main.m: shortcut chips + tappable path bar above an embedded WQNavigationController (`hidesHomeButton`) rooted at a WQDirViewController on `/`. Folder screens post `kWQDirDidAppearNotification` and expose `currentPath` (WQDir.h) so the bar follows. Tab added as the 5th (index 4), so existing tab indexes are unchanged. Classic design has no Files tab (it already lists the locations). Not compiled; whether `/` lists on every iOS build is unverified.
