@@ -1,0 +1,34 @@
+name: Build IPA
+
+# Manual only: nothing runs on push. GitHub → Actions → Build IPA → Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Skip the host regression tests (sets WQ_SKIP_PREFLIGHT=1)"
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Build WQFiles.ipa
+        env:
+          WQ_SKIP_PREFLIGHT: ${{ inputs.skip_tests && '1' || '0' }}
+        run: bash build.sh
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WQFiles-ipa
+          path: WQFiles.ipa
+          if-no-files-found: error
