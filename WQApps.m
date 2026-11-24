@@ -745,8 +745,12 @@ static BOOL wq_dir_size_cancellable(NSString *dir, NSString *taskID, WQScanCance
         typeof(self) strongSelf = weakSelf;
         if (strongSelf) wq_export_all_ipas(strongSelf, [strongSelf installedAppInfo]);
     }];
+    UIAction *cleanup = [UIAction actionWithTitle:WQLocalized(@"Backup Cleanup") image:[UIImage systemImageNamed:@"archivebox"]
+                                       identifier:nil handler:^(UIAction *__unused a) {
+        [weakSelf.navigationController pushViewController:[WQBackupRetentionViewController new] animated:YES];
+    }];
     UIBarButtonItem *item = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"wrench.and.screwdriver"]
-                                                              menu:[UIMenu menuWithTitle:@"" children:@[history, library, exportAll]]];
+                                                              menu:[UIMenu menuWithTitle:@"" children:@[history, library, exportAll, cleanup]]];
     item.accessibilityLabel = WQLocalized(@"Tools");
     return item;
 }
@@ -1189,6 +1193,12 @@ static void WQAppScanWatch(WQScanCancellation *cancellation, NSUInteger lastSeri
             }]];
             [actions addObject:[UIAction actionWithTitle:WQLocalizedNullable(@"Export IPA…") image:[UIImage systemImageNamed:@"square.and.arrow.up"] identifier:nil
                                                   handler:^(UIAction *__unused a) { [weakSelf exportIPA:app]; }]];
+        }
+        if (app.bundleID.length) {
+            [actions addObject:[UIAction actionWithTitle:WQLocalizedNullable(@"App Info") image:[UIImage systemImageNamed:@"info.circle"] identifier:nil
+                                                  handler:^(UIAction *__unused a) {
+                [weakSelf.navigationController pushViewController:[[WQAppInfoViewController alloc] initWithBundleID:app.bundleID name:app.name] animated:YES];
+            }]];
         }
         return [UIMenu menuWithChildren:actions];
     }];

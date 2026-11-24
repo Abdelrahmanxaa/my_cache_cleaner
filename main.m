@@ -37,6 +37,7 @@
 #import "WQSyntax.h"
 #import "WQMediaStream.h"
 #import "WQInspector.h"
+#import "WQTools.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
@@ -161,7 +162,7 @@ static void wq_folder_size_forget(NSString *path)
 // second, plain warning after the normal Delete confirmation. Returns the
 // reasons (one paragraph each), or nil when the delete is ordinary: caches,
 // tmp and the like are left alone because apps rebuild them.
-static NSString *wq_delete_risk_text(NSArray<NSString *> *paths)
+NSString *_Nullable wq_delete_risk_text(NSArray<NSString *> *paths)
 {
     NSMutableArray<NSString *> *reasons = [NSMutableArray new];
     void (^add)(NSString *) = ^(NSString *reason) { if (![reasons containsObject:reason]) [reasons addObject:reason]; };
@@ -1957,6 +1958,7 @@ static void wq_open_custom_inspector(UIViewController *host, NSString *path, UIV
                 readOnly:folder.readOnly || folder->_backupStorage];
             [folder.navigationController pushViewController:largest animated:YES];
         }]];
+        [menuItems addObject:wq_folder_tools_menu(self, _path, self.readOnly || _backupStorage)];
     }
     // Built when the menu opens, so the checkmarks show the current order.
     [menuItems addObject:[UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
@@ -3246,7 +3248,8 @@ static NSString *wq_sqlite_set_key(NSString *path)
         return cell;
     }
     WQItem *item = _items[(NSUInteger)indexPath.row];
-    c.text = item.label ?: item.name;
+    NSString *tagMarker = wq_tag_marker(item.path);
+    c.text = tagMarker ? [NSString stringWithFormat:@"%@ %@", tagMarker, item.label ?: item.name] : (item.label ?: item.name);
     BOOL byCreated = wq_sort_key() == WQSortCreated;
     NSString *date = wq_folder_date_text(byCreated ? item.created : item.modified);
     NSString *detail = item.isDir ? date : WQLocalizedFormat(@"%@ · %@", wq_size_text(item.size), date);
@@ -3490,6 +3493,9 @@ static NSString *wq_sqlite_set_key(NSString *path)
                 }],
             ]]];
         }
+        [actions addObject:wq_tag_menu(current.path, ^{
+            [weakSelf.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+        })];
         [actions addObject:[UIAction actionWithTitle:WQLocalizedNullable(@"Copy Path") image:[UIImage systemImageNamed:@"doc.on.doc"]
                                           identifier:nil handler:^(UIAction *__unused a) {
             WQItem *latest = currentItem();
