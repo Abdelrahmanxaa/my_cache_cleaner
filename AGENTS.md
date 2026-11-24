@@ -22,7 +22,7 @@ and cache cleaner (Objective-C, UIKit). Upstream: github.com/kolbicz/WQFiles.
 - Files tab (main.m `WQExplorerViewController`): New Design only; embeds a WQNavigationController at `/` under a shortcuts row and path bar.
 
 ## Repository
-Private GitHub repo `Abdelrahmanxaa/my_cache_cleaner` (since 2026-11-25), remote `origin`, branch `main`. Plain `git push` works (Git Credential Manager); never ask for or paste tokens. No `gh` CLI. New repos are created on github.com with Claude in Chrome. No Co-Authored-By trailers.
+GitHub repo (kept PUBLIC on the owner's instruction until the work is finished; make it private only when he asks) `Abdelrahmanxaa/my_cache_cleaner` (since 2026-11-25), remote `origin`, branch `main`. Plain `git push` works (Git Credential Manager); never ask for or paste tokens. No `gh` CLI. New repos are created on github.com with Claude in Chrome. No Co-Authored-By trailers.
 
 ## Build / run
 macOS only: `bash build.sh` (or `tests/run_all_tests.sh`). Not buildable on this Windows machine.
