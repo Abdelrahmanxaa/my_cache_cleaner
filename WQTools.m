@@ -80,7 +80,7 @@ static void wq_tools_share(UIViewController *host, NSString *path, UIView *sourc
 #pragma mark - Version history
 
 @implementation WQVersionHistoryViewController {
-    NSArray<NSDictionary *> *_apps;
+    NSArray<NSDictionary<NSString *, NSString *> *> *_apps;
     NSArray<NSDictionary *> *_rows;
     BOOL _loading;
 }
@@ -109,7 +109,7 @@ static void wq_tools_share(UIViewController *host, NSString *path, UIView *sourc
     if (_loading) { [self.refreshControl endRefreshing]; return; }
     _loading = YES;
     self.navigationItem.prompt = WQLocalizedNullable(@"Reading versions…");
-    NSArray<NSDictionary *> *apps = _apps;
+    NSArray<NSDictionary<NSString *, NSString *> *> *apps = _apps;
     dispatch_async(wq_io(), ^{
         NSString *file = wq_tools_history_file();
         NSDictionary *saved = [NSDictionary dictionaryWithContentsOfFile:file];
@@ -117,7 +117,7 @@ static void wq_tools_share(UIViewController *host, NSString *path, UIView *sourc
         NSMutableArray<NSDictionary *> *rows = [NSMutableArray new];
         NSMutableSet<NSString *> *current = [NSMutableSet new];
         NSUInteger changedCount = 0, unreadable = 0;
-        for (NSDictionary *app in apps) {
+        for (NSDictionary<NSString *, NSString *> *app in apps) {
             NSString *bundleID = app[@"bundleID"];
             NSString *name = app[@"name"].length ? app[@"name"] : bundleID;
             if (!bundleID.length) continue;
@@ -351,7 +351,7 @@ void wq_export_all_ipas(UIViewController *host, NSArray<NSDictionary<NSString *,
         return;
     }
     NSMutableArray<NSDictionary *> *todo = [NSMutableArray new];
-    for (NSDictionary *app in apps) {
+    for (NSDictionary<NSString *, NSString *> *app in apps) {
         NSString *path = app[@"bundleID"].length ? wq_bundle_path_for_id(app[@"bundleID"]) : nil;
         // Built-in apps live on the system volume, which can't be read.
         if (!path.length || [path hasPrefix:@"/Applications/"] || [path hasPrefix:@"/System/"]) continue;
