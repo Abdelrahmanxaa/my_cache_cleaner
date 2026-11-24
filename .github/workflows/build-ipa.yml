@@ -9,6 +9,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -32,3 +35,14 @@ jobs:
           name: WQFiles-ipa
           path: WQFiles.ipa
           if-no-files-found: error
+
+      # Keeps every build as a GitHub Release (tag build-<run number>), so the
+      # IPA can be downloaded with a plain link once the repository is public.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" WQFiles.ipa \
+            --repo "${{ github.repository }}" \
+            --title "Build ${{ github.run_number }}" \
+            --notes "Built from ${{ github.sha }}"
