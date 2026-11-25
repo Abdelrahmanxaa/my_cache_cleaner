@@ -29,7 +29,7 @@ class ReleasePolicyTests(unittest.TestCase):
         self.assertNotIn("application-identifier", entitlements)
         self.assertEqual(
             entitlements["com.apple.security.application-groups"],
-            ["group.cz.kolbi.wqfiles"],
+            ["group.cz.kolbi.wqfiles.5YSG8V3F7L"],
         )
 
     def test_catalog_policy_is_explicitly_26_0(self):
