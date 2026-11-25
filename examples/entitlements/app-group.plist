@@ -6,7 +6,7 @@
 	     Replace the group below with an App Group that is in YOUR provisioning profile. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.cz.kolbi.wqfiles.5YSG8V3F7L</string>
+		<string>group.com.ayoub.app</string>
 	</array>
 </dict>
 </plist>
