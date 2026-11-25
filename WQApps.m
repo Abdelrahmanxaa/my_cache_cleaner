@@ -745,12 +745,17 @@ static BOOL wq_dir_size_cancellable(NSString *dir, NSString *taskID, WQScanCance
         typeof(self) strongSelf = weakSelf;
         if (strongSelf) wq_export_all_ipas(strongSelf, [strongSelf installedAppInfo]);
     }];
+    UIAction *exportSelected = [UIAction actionWithTitle:WQLocalized(@"Export Selected IPAs…") image:[UIImage systemImageNamed:@"checkmark.circle"]
+                                              identifier:nil handler:^(UIAction *__unused a) {
+        typeof(self) strongSelf = weakSelf;
+        if (strongSelf) wq_export_selected_ipas(strongSelf, [strongSelf installedAppInfo]);
+    }];
     UIAction *cleanup = [UIAction actionWithTitle:WQLocalized(@"Backup Cleanup") image:[UIImage systemImageNamed:@"archivebox"]
                                        identifier:nil handler:^(UIAction *__unused a) {
         [weakSelf.navigationController pushViewController:[WQBackupRetentionViewController new] animated:YES];
     }];
     UIBarButtonItem *item = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"wrench.and.screwdriver"]
-                                                              menu:[UIMenu menuWithTitle:@"" children:@[history, library, exportAll, cleanup]]];
+                                                              menu:[UIMenu menuWithTitle:@"" children:@[history, library, exportSelected, exportAll, cleanup]]];
     item.accessibilityLabel = WQLocalized(@"Tools");
     return item;
 }
@@ -1191,6 +1196,9 @@ static void WQAppScanWatch(WQScanCancellation *cancellation, NSUInteger lastSeri
                 [weakSelf.navigationController pushViewController:[[WQDirViewController alloc] initWithPath:bundlePath title:app.name]
                                                          animated:YES];
             }]];
+        }
+        // Always listed; when the app's files can't be opened the action says so.
+        if (app.bundleID.length) {
             [actions addObject:[UIAction actionWithTitle:WQLocalizedNullable(@"Export IPA…") image:[UIImage systemImageNamed:@"square.and.arrow.up"] identifier:nil
                                                   handler:^(UIAction *__unused a) { [weakSelf exportIPA:app]; }]];
         }
@@ -1316,6 +1324,11 @@ static void WQAppScanWatch(WQScanCancellation *cancellation, NSUInteger lastSeri
                 [self.navigationController pushViewController:[[WQDirViewController alloc] initWithPath:app.container title:app.name] animated:YES];
             })];
         }
+        if (app.bundleID.length) {
+            [sheet addAction:wq_alert_action(WQLocalized(@"Export IPA…"), UIAlertActionStyleDefault, ^(UIAlertAction *__unused a) {
+                [self exportIPA:app];
+            })];
+        }
         [sheet addAction:wq_alert_action(WQLocalized(@"Copy Container Path"), UIAlertActionStyleDefault, ^(UIAlertAction *__unused a) {
             UIPasteboard.generalPasteboard.string = app.container;
         })];
@@ -1355,8 +1368,8 @@ static void WQAppScanWatch(WQScanCancellation *cancellation, NSUInteger lastSeri
     [sheet addAction:wq_alert_action(WQLocalized(@"Open Data Folder"), UIAlertActionStyleDefault, ^(UIAlertAction *__unused a) {
         [self.navigationController pushViewController:[[WQDirViewController alloc] initWithPath:app.container title:app.name] animated:YES];
     })];
-    // Only where bundle containers open (see the startup check).
-    if (app.bundleID.length && wq_app_bundles_reachable() && wq_display_names_loaded() && wq_bundle_path_for_id(app.bundleID).length) {
+    // Always listed; when the app's files can't be opened the action says so.
+    if (app.bundleID.length) {
         [sheet addAction:wq_alert_action(WQLocalized(@"Export IPA…"), UIAlertActionStyleDefault, ^(UIAlertAction *__unused a) {
             [self exportIPA:app];
         })];
@@ -1529,8 +1542,8 @@ static void WQAppScanWatch(WQScanCancellation *cancellation, NSUInteger lastSeri
 {
     if (_busy) return;
     NSString *bundlePath = app.bundleID.length && wq_app_bundles_reachable() ? wq_bundle_path_for_id(app.bundleID) : nil;
-    if (!bundlePath.length) {
-        wq_alert(self, @"Export IPA", @"This app's files can't be opened on this iOS version, so it can't be exported.");
+    if (!bundlePath.length || [bundlePath hasPrefix:@"/Applications/"] || [bundlePath hasPrefix:@"/System/"]) {
+        wq_alert(self, @"Export IPA", @"This app's installed files can't be opened here (built-in apps can't be read, and some iOS versions block app bundles), so it can't be exported.");
         return;
     }
     [self setBusy:YES status:WQLocalizedFormat(@"Reading %@…", app.name)];

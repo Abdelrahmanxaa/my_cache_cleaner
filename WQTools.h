@@ -49,4 +49,7 @@ NSString *_Nullable wq_delete_risk_text(NSArray<NSString *> *paths);
 // Documents/IPAs, one after the other, with a progress alert and Cancel.
 void wq_export_all_ipas(UIViewController *host, NSArray<NSDictionary<NSString *, NSString *> *> *apps);
 
+// Lets the user tick the apps to export, then exports only those.
+void wq_export_selected_ipas(UIViewController *host, NSArray<NSDictionary<NSString *, NSString *> *> *apps);
+
 NS_ASSUME_NONNULL_END

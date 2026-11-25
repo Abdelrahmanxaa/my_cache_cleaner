@@ -3454,6 +3454,15 @@ static NSString *wq_sqlite_set_key(NSString *path)
                 UITableViewCell *cell = [weakSelf.tableView cellForRowAtIndexPath:indexPath];
                 if (latest && weakSelf) wq_share_folder(weakSelf, latest.path, nil, cell);
             }]];
+            NSString *favoritePath = WQCanonicalVarPath(current.path);
+            BOOL saved = wq_favorite_index(wq_favorites(), favoritePath) != NSNotFound;
+            NSString *favoriteTitle = current.name.length ? current.name : current.path.lastPathComponent;
+            [actions addObject:[UIAction actionWithTitle:WQLocalized(saved ? @"Remove from Favorites" : @"Add to Favorites")
+                                                   image:[UIImage systemImageNamed:saved ? @"star.slash" : @"star"] identifier:nil
+                                                 handler:^(UIAction *__unused a) {
+                WQDirViewController *folder = weakSelf;
+                if (folder) wq_set_favorite(favoritePath, favoriteTitle, folder.readOnly, !saved);
+            }]];
         }
         if (!current.isDir && current.isRegular) {
             [actions addObject:[UIAction actionWithTitle:WQLocalizedNullable(@"Share") image:[UIImage systemImageNamed:@"square.and.arrow.up"]
@@ -6813,6 +6822,12 @@ static UIButton *wq_explorer_chip(NSString *title, NSString *symbol, BOOL curren
     [_nav pushViewController:[WQFavoritesViewController new] animated:YES];
 }
 
+// The folder browser inside this tab (the side menu pushes screens on it).
+- (UINavigationController *)embeddedNavigationController
+{
+    return _nav;
+}
+
 - (void)showPath:(NSString *)path
 {
     _shownPath = path;
@@ -7669,11 +7684,282 @@ static BOOL wq_ios_supported(void)
 
 @end
 
+#pragma mark - Side menu
+
+static NSDictionary *wq_menu_row(NSString *title, NSString *symbol, void (^action)(void))
+{
+    return @{@"title": title, @"symbol": symbol, @"action": [action copy]};
+}
+
+// A drawer that slides in from the right edge on any screen (edge swipe, or the
+// small tab on the right edge) with shortcuts to the tabs, the main locations,
+// Favorites and Recent. It wraps whichever start screen is in use.
+@interface WQSideMenuController : UIViewController <UITableViewDataSource, UITableViewDelegate>
+- (instancetype)initWithContent:(UIViewController *)content;
+@end
+
+@implementation WQSideMenuController {
+    UIViewController *_content;
+    UIView *_dim;
+    UIVisualEffectView *_drawer;
+    UITableView *_table;
+    UIButton *_handle;
+    NSArray<NSDictionary *> *_sections;
+    BOOL _open;
+}
+
+- (instancetype)initWithContent:(UIViewController *)content
+{
+    if ((self = [super initWithNibName:nil bundle:nil])) _content = content;
+    return self;
+}
+
+- (UIViewController *)childViewControllerForStatusBarStyle { return _content; }
+- (UIViewController *)childViewControllerForStatusBarHidden { return _content; }
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    [self addChildViewController:_content];
+    _content.view.frame = self.view.bounds;
+    _content.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:_content.view];
+    [_content didMoveToParentViewController:self];
+
+    _dim = [[UIView alloc] initWithFrame:self.view.bounds];
+    _dim.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _dim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35];
+    _dim.alpha = 0;
+    _dim.hidden = YES;
+    [_dim addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closeMenu)]];
+    [self.view addSubview:_dim];
+
+    _drawer = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
+    _table.backgroundColor = UIColor.clearColor;
+    _table.dataSource = self;
+    _table.delegate = self;
+    _table.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [_drawer.contentView addSubview:_table];
+    UISwipeGestureRecognizer *close = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(closeMenu)];
+    close.direction = UISwipeGestureRecognizerDirectionRight;
+    [_drawer addGestureRecognizer:close];
+    [self.view addSubview:_drawer];
+
+    _handle = [UIButton buttonWithType:UIButtonTypeSystem];
+    [_handle setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
+    _handle.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.9];
+    _handle.layer.cornerRadius = 12;
+    _handle.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMinXMaxYCorner;
+    _handle.accessibilityLabel = WQLocalized(@"Menu");
+    [_handle addTarget:self action:@selector(openMenu) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_handle];
+
+    UIScreenEdgePanGestureRecognizer *edge = [[UIScreenEdgePanGestureRecognizer alloc] initWithTarget:self action:@selector(edgePan:)];
+    edge.edges = UIRectEdgeRight;
+    [self.view addGestureRecognizer:edge];
+}
+
+- (void)viewDidLayoutSubviews
+{
+    [super viewDidLayoutSubviews];
+    CGFloat w = self.view.bounds.size.width, h = self.view.bounds.size.height;
+    CGFloat width = MIN(320, w * 0.82);
+    _drawer.frame = CGRectMake(_open ? w - width : w, 0, width, h);
+    _table.frame = _drawer.contentView.bounds;
+    _handle.frame = CGRectMake(w - 26, h * 0.4, 26, 64);
+}
+
+- (void)edgePan:(UIScreenEdgePanGestureRecognizer *)gesture
+{
+    if (gesture.state == UIGestureRecognizerStateBegan) [self setMenuOpen:YES];
+}
+
+- (void)openMenu { [self setMenuOpen:YES]; }
+- (void)closeMenu { [self setMenuOpen:NO]; }
+
+- (void)setMenuOpen:(BOOL)open
+{
+    if (open == _open) return;
+    if (open) {
+        [self.view endEditing:YES];
+        [self rebuildSections];
+        [_table reloadData];
+        _dim.hidden = NO;
+    }
+    _open = open;
+    CGFloat w = self.view.bounds.size.width, width = _drawer.bounds.size.width;
+    UIView *dim = _dim, *drawer = _drawer, *handle = _handle;
+    [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        dim.alpha = open ? 1 : 0;
+        handle.alpha = open ? 0 : 1;
+        CGRect frame = drawer.frame;
+        frame.origin.x = open ? w - width : w;
+        drawer.frame = frame;
+    } completion:^(BOOL __unused finished) {
+        if (!open) dim.hidden = YES;
+    }];
+}
+
+// The navigation controller of the tab in front (the folder browser's own for
+// the Files tab), or the only one in the classic design.
+- (UINavigationController *)activeNav
+{
+    UIViewController *vc = _content;
+    if ([vc isKindOfClass:UITabBarController.class]) vc = ((UITabBarController *)vc).selectedViewController;
+    if ([vc isKindOfClass:WQExplorerViewController.class]) return [(WQExplorerViewController *)vc embeddedNavigationController];
+    if ([vc isKindOfClass:UINavigationController.class]) return (UINavigationController *)vc;
+    return nil;
+}
+
+- (void)selectTab:(NSUInteger)index
+{
+    UITabBarController *tabs = (UITabBarController *)_content;
+    if (![tabs isKindOfClass:UITabBarController.class] || index >= tabs.viewControllers.count) return;
+    UIViewController *target = tabs.viewControllers[index];
+    if (tabs.selectedViewController == target && [target isKindOfClass:UINavigationController.class])
+        [(UINavigationController *)target popToRootViewControllerAnimated:YES];
+    tabs.selectedIndex = index;
+}
+
+- (void)pushScreen:(UIViewController *)screen
+{
+    [[self activeNav] pushViewController:screen animated:YES];
+}
+
+- (void)openFolder:(NSString *)path title:(NSString *)title readOnly:(BOOL)readOnly
+{
+    WQDirViewController *folder = [[WQDirViewController alloc] initWithPath:path title:title];
+    folder.readOnly = readOnly;
+    [self pushScreen:folder];
+}
+
+- (void)openSettingsSheet
+{
+    WQPrismSettingsViewController *settings = [WQPrismSettingsViewController new];
+    WQNavigationController *nav = [[WQNavigationController alloc] initWithRootViewController:settings];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    UISheetPresentationController *sheet = nav.sheetPresentationController;
+    if (sheet) {
+        sheet.detents = @[UISheetPresentationControllerDetent.largeDetent];
+        sheet.prefersGrabberVisible = YES;
+        sheet.preferredCornerRadius = 32;
+    }
+    UIViewController *top = _content;
+    while (top.presentedViewController) top = top.presentedViewController;
+    [top presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)rebuildSections
+{
+    __weak typeof(self) weakSelf = self;
+    NSMutableArray<NSDictionary *> *sections = [NSMutableArray new];
+
+    NSMutableArray<NSDictionary *> *go = [NSMutableArray new];
+    if ([_content isKindOfClass:UITabBarController.class]) {
+        NSArray<NSString *> *names = @[@"Home", @"Apps", @"Clean", @"Backups", @"Files"];
+        NSArray<NSString *> *symbols = @[@"house.fill", @"square.grid.3x3.fill", @"sparkles", @"clock.arrow.circlepath", @"folder.fill"];
+        NSUInteger count = ((UITabBarController *)_content).viewControllers.count;
+        for (NSUInteger i = 0; i < count && i < names.count; i++)
+            [go addObject:wq_menu_row(WQLocalized(names[i]), symbols[i], ^{ [weakSelf selectTab:i]; })];
+        [go addObject:wq_menu_row(WQLocalized(@"Settings"), @"gearshape", ^{ [weakSelf openSettingsSheet]; })];
+    } else {
+        [go addObject:wq_menu_row(WQLocalized(@"Home"), @"house.fill", ^{ [[weakSelf activeNav] popToRootViewControllerAnimated:YES]; })];
+    }
+    [sections addObject:@{@"title": WQLocalized(@"Go to"), @"rows": go}];
+
+    NSArray<NSArray<NSString *> *> *places = @[
+        @[@"Root", @"/", @"externaldrive"],
+        @[@"App Data", @"/private/var/mobile/Containers/Data/Application", @"square.grid.2x2"],
+        @[@"App Groups", @"/private/var/mobile/Containers/Shared/AppGroup", @"square.stack.3d.up"],
+        @[@"Extension Data", @"/private/var/mobile/Containers/Data/PluginKitPlugin", @"puzzlepiece.extension"],
+        @[@"Internal Daemons", @"/private/var/mobile/Containers/Data/InternalDaemon", @"gearshape.2"],
+    ];
+    NSMutableArray<NSDictionary *> *locations = [NSMutableArray new];
+    for (NSArray<NSString *> *place in places) {
+        NSString *path = place[1], *title = place[0];
+        [locations addObject:wq_menu_row(WQLocalized(title), place[2], ^{ [weakSelf openFolder:path title:WQLocalized(title) readOnly:NO]; })];
+    }
+    if (wq_app_bundles_reachable())
+        [locations addObject:wq_menu_row(WQLocalized(@"App Bundles"), @"app.badge", ^{
+            [weakSelf openFolder:@"/private/var/containers/Bundle/Application" title:WQLocalized(@"App Bundles") readOnly:NO];
+        })];
+    if (wq_system_areas_reachable())
+        [locations addObject:wq_menu_row(WQLocalized(@"System Data"), @"cpu", ^{
+            [weakSelf openFolder:@"/private/var/containers/Data/System" title:WQLocalized(@"System Data") readOnly:NO];
+        })];
+    [locations addObject:wq_menu_row(WQLocalized(@"App Backups"), @"externaldrive.badge.timemachine", ^{
+        [NSFileManager.defaultManager createDirectoryAtPath:wq_app_backup_root() withIntermediateDirectories:YES attributes:nil error:nil];
+        [weakSelf openFolder:wq_app_backup_root() title:WQLocalized(@"App Backups") readOnly:NO];
+    })];
+    [sections addObject:@{@"title": WQLocalized(@"Locations"), @"rows": locations}];
+
+    NSMutableArray<NSDictionary *> *favorites = [NSMutableArray new];
+    for (NSDictionary *favorite in wq_favorites()) {
+        NSString *path = favorite[@"path"], *title = favorite[@"title"];
+        if (![path isKindOfClass:NSString.class]) continue;
+        BOOL readOnly = [favorite[@"readOnly"] boolValue];
+        [favorites addObject:wq_menu_row(WQVerbatim([title isKindOfClass:NSString.class] ? title : path), @"star", ^{
+            [weakSelf openFolder:path title:[title isKindOfClass:NSString.class] ? title : nil readOnly:readOnly];
+        })];
+    }
+    [favorites addObject:wq_menu_row(WQLocalized(@"All Favorites"), @"star.fill", ^{ [weakSelf pushScreen:[WQFavoritesViewController new]]; })];
+    [favorites addObject:wq_menu_row(WQLocalized(@"Recent"), @"clock", ^{ [weakSelf pushScreen:[WQRecentsViewController new]]; })];
+    [sections addObject:@{@"title": WQLocalized(@"Favorites"), @"rows": favorites}];
+
+    [sections addObject:@{@"title": WQLocalized(@"More"), @"rows": @[
+        wq_menu_row(WQLocalized(@"Recently Deleted"), @"trash", ^{ [weakSelf pushScreen:[WQRecentlyDeletedViewController new]]; }),
+        wq_menu_row(WQLocalized(@"Log"), @"doc.text", ^{ [weakSelf pushScreen:[WQLogViewController new]]; }),
+    ]}];
+    _sections = sections;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return (NSInteger)_sections.count;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    return (NSInteger)[_sections[(NSUInteger)section][@"rows"] count];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section
+{
+    return _sections[(NSUInteger)section][@"title"];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"menu"]
+        ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"menu"];
+    NSDictionary *row = _sections[(NSUInteger)indexPath.section][@"rows"][(NSUInteger)indexPath.row];
+    UIListContentConfiguration *content = cell.defaultContentConfiguration;
+    content.text = row[@"title"];
+    content.image = [UIImage systemImageNamed:row[@"symbol"]];
+    cell.contentConfiguration = content;
+    cell.backgroundColor = [UIColor.secondarySystemGroupedBackgroundColor colorWithAlphaComponent:0.7];
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    NSDictionary *row = _sections[(NSUInteger)indexPath.section][@"rows"][(NSUInteger)indexPath.row];
+    void (^action)(void) = row[@"action"];
+    [self setMenuOpen:NO];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), action);
+}
+
+@end
+
 static UIViewController *wq_make_root_view_controller(void)
 {
     if (!wq_ios_supported()) return [WQUnsupportedViewController new];
-    if (wq_prism_enabled()) return [WQPrismTabController new];
-    return [[WQNavigationController alloc] initWithRootViewController:[WQRootViewController new]];
+    UIViewController *start = wq_prism_enabled() ? (UIViewController *)[WQPrismTabController new]
+        : (UIViewController *)[[WQNavigationController alloc] initWithRootViewController:[WQRootViewController new]];
+    return [[WQSideMenuController alloc] initWithContent:start];
 }
 
 static UIViewController *wq_top_view_controller(void);

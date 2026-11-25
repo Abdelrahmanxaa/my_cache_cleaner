@@ -344,24 +344,141 @@ static void wq_tools_share(UIViewController *host, NSString *path, UIView *sourc
 
 #pragma mark - Export all
 
-void wq_export_all_ipas(UIViewController *host, NSArray<NSDictionary<NSString *, NSString *> *> *apps)
+// The apps in `apps` whose bundle folder can be read (name, bundleID, path).
+static NSArray<NSDictionary *> *wq_exportable_apps(NSArray<NSDictionary<NSString *, NSString *> *> *apps)
 {
-    if (!wq_app_bundles_reachable() || !wq_display_names_loaded()) {
-        wq_alert(host, @"Export IPA", @"This app's files can't be opened on this iOS version, so it can't be exported.");
-        return;
-    }
     NSMutableArray<NSDictionary *> *todo = [NSMutableArray new];
+    if (!wq_app_bundles_reachable() || !wq_display_names_loaded()) return todo;
     for (NSDictionary<NSString *, NSString *> *app in apps) {
         NSString *path = app[@"bundleID"].length ? wq_bundle_path_for_id(app[@"bundleID"]) : nil;
         // Built-in apps live on the system volume, which can't be read.
         if (!path.length || [path hasPrefix:@"/Applications/"] || [path hasPrefix:@"/System/"]) continue;
         [todo addObject:@{@"name": app[@"name"] ?: app[@"bundleID"], @"bundleID": app[@"bundleID"], @"path": path}];
     }
+    return todo;
+}
+
+static void wq_export_ipa_list(UIViewController *host, NSArray<NSDictionary *> *todo, BOOL all);
+
+#pragma mark - Export selected
+
+@interface WQSelectIPAsViewController : UITableViewController
+- (instancetype)initWithApps:(NSArray<NSDictionary *> *)apps host:(UIViewController *)host;
+@end
+
+@implementation WQSelectIPAsViewController {
+    NSArray<NSDictionary *> *_apps;
+    NSMutableSet<NSString *> *_selected;
+    __weak UIViewController *_host;
+}
+
+- (instancetype)initWithApps:(NSArray<NSDictionary *> *)apps host:(UIViewController *)host
+{
+    if ((self = [super initWithStyle:UITableViewStylePlain])) {
+        _apps = [apps sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+            return [a[@"name"] localizedCaseInsensitiveCompare:b[@"name"]];
+        }];
+        _selected = [NSMutableSet new];
+        _host = host;
+    }
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    self.title = WQLocalized(@"Export Selected IPAs");
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                                                                                          target:self action:@selector(cancel)];
+    [self updateButtons];
+}
+
+- (void)updateButtons
+{
+    UIBarButtonItem *export = [[UIBarButtonItem alloc] initWithTitle:[NSString stringWithFormat:@"%@ (%lu)", WQLocalized(@"Export"), (unsigned long)_selected.count]
+                                                               style:UIBarButtonItemStylePlain target:self action:@selector(exportSelected)];
+    export.enabled = _selected.count > 0;
+    UIBarButtonItem *toggle = [[UIBarButtonItem alloc] initWithTitle:WQLocalized(_selected.count == _apps.count ? @"Select None" : @"Select All")
+                                                               style:UIBarButtonItemStylePlain target:self action:@selector(toggleAll)];
+    self.navigationItem.rightBarButtonItems = @[export, toggle];
+}
+
+- (void)cancel
+{
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)toggleAll
+{
+    if (_selected.count == _apps.count) [_selected removeAllObjects];
+    else for (NSDictionary *app in _apps) [_selected addObject:app[@"bundleID"]];
+    [self.tableView reloadData];
+    [self updateButtons];
+}
+
+- (void)exportSelected
+{
+    NSMutableArray<NSDictionary *> *chosen = [NSMutableArray new];
+    for (NSDictionary *app in _apps) if ([_selected containsObject:app[@"bundleID"]]) [chosen addObject:app];
+    UIViewController *host = _host;
+    if (!chosen.count || !host) return;
+    [self dismissViewControllerAnimated:YES completion:^{ wq_export_ipa_list(host, chosen, NO); }];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    return (NSInteger)_apps.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"select"]
+        ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"select"];
+    NSDictionary *app = _apps[(NSUInteger)indexPath.row];
+    cell.textLabel.text = app[@"name"];
+    cell.detailTextLabel.text = app[@"bundleID"];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    cell.imageView.image = wq_app_icon(app[@"bundleID"]) ?: [UIImage systemImageNamed:@"app.dashed"];
+    cell.accessoryType = [_selected containsObject:app[@"bundleID"]] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    NSString *bundleID = _apps[(NSUInteger)indexPath.row][@"bundleID"];
+    if ([_selected containsObject:bundleID]) [_selected removeObject:bundleID];
+    else [_selected addObject:bundleID];
+    [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+    [self updateButtons];
+}
+
+@end
+
+void wq_export_selected_ipas(UIViewController *host, NSArray<NSDictionary<NSString *, NSString *> *> *apps)
+{
+    NSArray<NSDictionary *> *todo = wq_exportable_apps(apps);
     if (!todo.count) {
         wq_alert(host, @"Export IPA", @"No installed apps can be exported here.");
         return;
     }
-    UIAlertController *confirm = wq_alert_controller(@"Export all IPAs?",
+    WQSelectIPAsViewController *picker = [[WQSelectIPAsViewController alloc] initWithApps:todo host:host];
+    [host presentViewController:[[UINavigationController alloc] initWithRootViewController:picker] animated:YES completion:nil];
+}
+
+void wq_export_all_ipas(UIViewController *host, NSArray<NSDictionary<NSString *, NSString *> *> *apps)
+{
+    NSArray<NSDictionary *> *todo = wq_exportable_apps(apps);
+    if (!todo.count) {
+        wq_alert(host, @"Export IPA", @"No installed apps can be exported here.");
+        return;
+    }
+    wq_export_ipa_list(host, todo, YES);
+}
+
+static void wq_export_ipa_list(UIViewController *host, NSArray<NSDictionary *> *todo, BOOL all)
+{
+    UIAlertController *confirm = wq_alert_controller(all ? @"Export all IPAs?" : @"Export selected IPAs?",
         WQLocalizedFormat(@"%lu apps are exported one after another into the IPAs folder. This takes a while and needs free space. Apps from the App Store or TestFlight are exported as they are, still encrypted, and won't launch after re-signing.", (unsigned long)todo.count),
         UIAlertControllerStyleAlert);
     [confirm addAction:wq_alert_action(@"Cancel", UIAlertActionStyleCancel, nil)];

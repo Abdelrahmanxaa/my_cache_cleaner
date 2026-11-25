@@ -19,6 +19,8 @@ and cache cleaner (Objective-C, UIKit). Upstream: github.com/kolbicz/WQFiles.
 - Settings: two screens in `main.m` (Prism `WQPrismSettingsViewController`, classic list in the home controller). Row numbers are hard-coded; change them together.
 
 - Export IPA (WQApps.m `exportIPA:`): copies an installed app's .app into Documents/IPAs as a Payload/ ZIP. Reports encryption (cryptid) but never decrypts.
+- Side menu (main.m `WQSideMenuController`): wraps the root view controller (`wq_make_root_view_controller`) in both designs; opens from the right edge (swipe or the small tab). Entries are built in `rebuildSections`; pushes go on `activeNav` (the Files tab's embedded nav via `embeddedNavigationController`).
+- Export IPAs (WQTools.m): `wq_export_all_ipas` and `wq_export_selected_ipas` share `wq_export_ipa_list`.
 - Files tab (main.m `WQExplorerViewController`): New Design only; embeds a WQNavigationController at `/` under a shortcuts row and path bar.
 
 ## Identifiers
